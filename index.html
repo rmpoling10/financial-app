@@ -190,6 +190,7 @@ input[type=range]{width:100%;accent-color:#185FA5}
 <div class="io-row">
   <button class="io-btn" onclick="exportData()"><i class="ti ti-download" aria-hidden="true"></i> Export data</button>
   <label class="io-btn" style="cursor:pointer"><i class="ti ti-upload" aria-hidden="true"></i> Import data<input type="file" accept=".json" style="display:none" onchange="importData(event)"></label>
+  <button class="io-btn" onclick="resetAll()" style="color:#A32D2D;border-color:#A32D2D"><i class="ti ti-refresh" aria-hidden="true"></i> Reset</button>
 </div>
 
 <!-- Summary bar -->
@@ -326,97 +327,107 @@ input[type=range]{width:100%;accent-color:#185FA5}
 </div>
 
 <script>
+// ─── Default state (must be first) ───────────────────────────────────────────
+const DEFAULT_STATE = {
+  mode:'single', taxMode:'pre',
+  persons:[
+    {name:'Person 1',freq:'annual',val:0,hrs:40,k401Pct:0,esopPct:0,matchCapPct:4,matchRatePct:50,healthPremium:0,hsaPerPaycheck:0,fsaPerPaycheck:0,dentalPremium:0,visionPremium:0,lifePremium:0,stateTax:3.5,color:'#185FA5',dot:'p1c'},
+    {name:'Person 2',freq:'annual',val:0,hrs:40,k401Pct:0,esopPct:0,matchCapPct:4,matchRatePct:50,healthPremium:0,hsaPerPaycheck:0,fsaPerPaycheck:0,dentalPremium:0,visionPremium:0,lifePremium:0,stateTax:3.5,color:'#993556',dot:'p2c'},
+  ],
+  sections:[
+    {id:'housing',icon:'ti-home',label:'Housing',color:'#185FA5',perPerson:false,items:[
+      {label:'Mortgage / rent',val:[0,0],nws:'needs',linked:true,linkedKey:'mortgage'},
+      {label:'Property tax',val:[0,0],nws:'needs',linked:true,linkedKey:'propertytax'},
+      {label:'Home insurance',val:[0,0],nws:'needs',linked:true,linkedKey:'insurance'},
+      {label:'HOA',val:[0,0],nws:'needs',linked:true,linkedKey:'hoa'},
+      {label:'PMI',val:[0,0],nws:'needs',linked:true,linkedKey:'pmi'},
+      {label:'Maintenance',val:[0,0],nws:'needs'},
+    ]},
+    {id:'transport',icon:'ti-car',label:'Transportation',color:'#3B6D11',perPerson:true,items:[
+      {label:'Car payment',val:[0,0],nws:'needs'},
+      {label:'Car insurance',val:[0,0],nws:'needs'},
+      {label:'Gas',val:[0,0],nws:'needs'},
+      {label:'Registration',val:[0,0],nws:'needs'},
+    ]},
+    {id:'food',icon:'ti-shopping-cart',label:'Food',color:'#BA7517',perPerson:false,items:[
+      {label:'Groceries',val:[0,0],nws:'needs'},
+      {label:'Dining out',val:[0,0],nws:'wants'},
+      {label:'Coffee / snacks',val:[0,0],nws:'wants'},
+    ]},
+    {id:'utilities',icon:'ti-bolt',label:'Utilities',color:'#993C1D',perPerson:false,items:[
+      {label:'Electric',val:[0,0],nws:'needs'},
+      {label:'Gas / heat',val:[0,0],nws:'needs'},
+      {label:'Water / sewer',val:[0,0],nws:'needs'},
+      {label:'Internet',val:[0,0],nws:'needs'},
+      {label:'Cell phone',val:[0,0],nws:'needs'},
+    ]},
+    {id:'investing',icon:'ti-chart-line',label:'Investing & retirement',color:'#534AB7',perPerson:true,items:[
+      {label:'401k contribution',val:[0,0],nws:'saves',investKey:'k401',linked:true},
+      {label:'Emergency fund',val:[0,0],nws:'saves'},
+    ]},
+    {id:'health',icon:'ti-heart',label:'Health & wellness',color:'#0F6E56',perPerson:true,items:[
+      {label:'Health insurance',val:[0,0],nws:'needs'},
+      {label:'Gym / fitness',val:[0,0],nws:'wants'},
+      {label:'Prescriptions',val:[0,0],nws:'needs'},
+    ]},
+    {id:'personal',icon:'ti-user',label:'Personal & lifestyle',color:'#993556',perPerson:true,items:[
+      {label:'Clothing',val:[0,0],nws:'wants'},
+      {label:'Entertainment',val:[0,0],nws:'wants'},
+      {label:'Streaming',val:[0,0],nws:'wants'},
+      {label:'Golf / hobbies',val:[0,0],nws:'wants'},
+    ]},
+    {id:'savings',icon:'ti-piggy-bank',label:'Savings goals',color:'#639922',perPerson:false,items:[
+      {label:'Vacation fund',val:[0,0],nws:'saves'},
+      {label:'Down payment',val:[0,0],nws:'saves'},
+      {label:'Short-term',val:[0,0],nws:'saves'},
+    ]},
+    {id:'other',icon:'ti-dots',label:'Other',color:'#888780',perPerson:false,items:[
+      {label:'Student loans',val:[0,0],nws:'needs'},
+      {label:'Subscriptions',val:[0,0],nws:'wants'},
+      {label:'Gifts / charity',val:[0,0],nws:'wants'},
+    ]},
+  ],
+  personAccounts:[
+    [{id:'p0-k401',type:'retirement',label:'401k / 403b',currentBalance:0,rate:8.0,funds:[]}],
+    [{id:'p1-k401',type:'retirement',label:'401k / 403b',currentBalance:0,rate:8.0,funds:[]}],
+  ],
+};
+
 // ─── State ───────────────────────────────────────────────────────────────────
 let mode = 'single';
 let taxMode = 'pre';
-let persons = [
-  {name:'Person 1',freq:'annual',val:75000,hrs:40,k401Pct:6,esopPct:5,matchCapPct:4,matchRatePct:50,healthPremium:150,hsaPerPaycheck:0,fsaPerPaycheck:0,dentalPremium:0,visionPremium:0,lifePremium:0,stateTax:3.5,color:'#185FA5',dot:'p1c'},
-  {name:'Person 2',freq:'annual',val:65000,hrs:40,k401Pct:6,esopPct:5,matchCapPct:4,matchRatePct:50,healthPremium:130,hsaPerPaycheck:0,fsaPerPaycheck:0,dentalPremium:0,visionPremium:0,lifePremium:0,stateTax:3.5,color:'#993556',dot:'p2c'},
-];
+let persons = JSON.parse(JSON.stringify(DEFAULT_STATE.persons));
+let sections = JSON.parse(JSON.stringify(DEFAULT_STATE.sections));
 let openSections = new Set(['housing','transport','food','investing']);
 let horizonYears = 10;
 let growthChart = null;
-
-// Investment accounts — per person, investments tab is source of truth → syncs to budget
-// personAccounts[pi] = [{id, type, label, currentBalance, funds:[{id,name,amount,freq,rate}]}]
-let personAccounts = [
-  [ // Person 1 defaults
-    {id:'p0-k401', type:'retirement', label:'401k / 403b', currentBalance:0, rate:8.0, funds:[]},
-    {id:'p0-roth', type:'roth',       label:'Roth IRA',    currentBalance:0, rate:9.0, funds:[{id:'p0-r1',name:'VOO',amount:583,freq:'monthly'}]},
-    {id:'p0-brok', type:'brokerage',  label:'Brokerage',   currentBalance:0, rate:10.5,funds:[{id:'p0-b1',name:'VOO',amount:200,freq:'monthly'}]},
-  ],
-  [ // Person 2 defaults
-    {id:'p1-k401', type:'retirement', label:'401k / 403b', currentBalance:0, rate:8.0, funds:[]},
-    {id:'p1-roth', type:'roth',       label:'Roth IRA',    currentBalance:0, rate:9.0, funds:[{id:'p1-r1',name:'VOO',amount:583,freq:'monthly'}]},
-    {id:'p1-brok', type:'brokerage',  label:'Brokerage',   currentBalance:0, rate:10.5,funds:[{id:'p1-b1',name:'VOO',amount:100,freq:'monthly'}]},
-  ]
-];
+let personAccounts = JSON.parse(JSON.stringify(DEFAULT_STATE.personAccounts));
 let nextInvId = 100;
-
 let hState = {mortgage:0,propertytax:0,insurance:0,hoa:0,pmi:0,total:0,loanAmt:0,rate:6.75,term:30};
 
 const FREQ_DEFAULTS = {annual:75000,monthly:6250,biweekly:2885,hourly:36};
 const FREQ_LABELS = {annual:'Annual salary',monthly:'Monthly gross',biweekly:'Biweekly paycheck',hourly:'Hourly rate'};
 
-
-let sections = [
-  {id:'housing',icon:'ti-home',label:'Housing',color:'#185FA5',perPerson:false,items:[
-    {label:'Mortgage / rent',val:[0,0],nws:'needs',linked:true,linkedKey:'mortgage'},
-    {label:'Property tax',val:[0,0],nws:'needs',linked:true,linkedKey:'propertytax'},
-    {label:'Home insurance',val:[0,0],nws:'needs',linked:true,linkedKey:'insurance'},
-    {label:'HOA',val:[0,0],nws:'needs',linked:true,linkedKey:'hoa'},
-    {label:'PMI',val:[0,0],nws:'needs',linked:true,linkedKey:'pmi'},
-    {label:'Maintenance',val:[100,0],nws:'needs'},
-  ]},
-  {id:'transport',icon:'ti-car',label:'Transportation',color:'#3B6D11',perPerson:true,items:[
-    {label:'Car payment',val:[350,300],nws:'needs'},
-    {label:'Car insurance',val:[110,95],nws:'needs'},
-    {label:'Gas',val:[120,80],nws:'needs'},
-    {label:'Registration',val:[15,15],nws:'needs'},
-  ]},
-  {id:'food',icon:'ti-shopping-cart',label:'Food',color:'#BA7517',perPerson:false,items:[
-    {label:'Groceries',val:[400,0],nws:'needs'},
-    {label:'Dining out',val:[150,0],nws:'wants'},
-    {label:'Coffee / snacks',val:[50,0],nws:'wants'},
-  ]},
-  {id:'utilities',icon:'ti-bolt',label:'Utilities',color:'#993C1D',perPerson:false,items:[
-    {label:'Electric',val:[110,0],nws:'needs'},
-    {label:'Gas / heat',val:[60,0],nws:'needs'},
-    {label:'Water / sewer',val:[40,0],nws:'needs'},
-    {label:'Internet',val:[60,0],nws:'needs'},
-    {label:'Cell phone',val:[55,55],nws:'needs'},
-  ]},
-  {id:'investing',icon:'ti-chart-line',label:'Investing & retirement',color:'#534AB7',perPerson:true,items:[
-    {label:'401k contribution',val:[0,0],nws:'saves',investKey:'k401',linked:true},
-    {label:'Roth IRA',val:[583,583],nws:'saves',investKey:'roth'},
-    {label:'VOO / brokerage',val:[200,100],nws:'saves',investKey:'voo'},
-    {label:'HSA',val:[50,50],nws:'saves',investKey:'hsa'},
-    {label:'Emergency fund',val:[150,0],nws:'saves'},
-  ]},
-  {id:'health',icon:'ti-heart',label:'Health & wellness',color:'#0F6E56',perPerson:true,items:[
-    {label:'Health insurance',val:[150,130],nws:'needs'},
-    {label:'Gym / fitness',val:[40,40],nws:'wants'},
-    {label:'Prescriptions',val:[30,20],nws:'needs'},
-  ]},
-  {id:'personal',icon:'ti-user',label:'Personal & lifestyle',color:'#993556',perPerson:true,items:[
-    {label:'Clothing',val:[60,60],nws:'wants'},
-    {label:'Entertainment',val:[80,60],nws:'wants'},
-    {label:'Streaming',val:[40,0],nws:'wants'},
-    {label:'Golf / hobbies',val:[80,40],nws:'wants'},
-  ]},
-  {id:'savings',icon:'ti-piggy-bank',label:'Savings goals',color:'#639922',perPerson:false,items:[
-    {label:'Vacation fund',val:[100,0],nws:'saves'},
-    {label:'Down payment',val:[200,0],nws:'saves'},
-    {label:'Short-term',val:[100,0],nws:'saves'},
-  ]},
-  {id:'other',icon:'ti-dots',label:'Other',color:'#888780',perPerson:false,items:[
-    {label:'Student loans',val:[0,0],nws:'needs'},
-    {label:'Subscriptions',val:[20,0],nws:'wants'},
-    {label:'Gifts / charity',val:[30,0],nws:'wants'},
-  ]},
-];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+function resetAll() {
+  if(!confirm('Reset everything to blank defaults? This cannot be undone.')) return;
+  localStorage.removeItem('finapp_v2');
+  mode = DEFAULT_STATE.mode;
+  taxMode = DEFAULT_STATE.taxMode;
+  persons = JSON.parse(JSON.stringify(DEFAULT_STATE.persons));
+  sections = JSON.parse(JSON.stringify(DEFAULT_STATE.sections));
+  personAccounts = JSON.parse(JSON.stringify(DEFAULT_STATE.personAccounts));
+  nextInvId = 100;
+  horizonYears = 10;
+  openSections = new Set(['housing','transport','food','investing']);
+  document.getElementById('horizon-slider').value = 10;
+  document.getElementById('horizon-label').textContent = '10 yr';
+  document.getElementById('btn-single').classList.add('active');
+  document.getElementById('btn-dual').classList.remove('active');
+  syncInvestToBudget();
+  renderAll();
+  renderInvestPersons();
+  calcHousing();
+}
 const fmtC = n => '$' + Math.round(Math.abs(n)).toLocaleString();
 const fmtS = n => (n<0?'-':'') + '$' + Math.round(Math.abs(n)).toLocaleString();
 const fmtP = n => parseFloat(n).toFixed(1) + '%';
@@ -858,6 +869,7 @@ function updateBudgetItem(si,ii,pi,v) {
   sections[si].items[ii].val[pi]=parseFloat(v)||0;
   saveState();
   updateSummaryBar();
+  renderNWSCards();
   if(document.getElementById('view-invest').classList.contains('active')) renderInvestTab();
 }
 
@@ -889,13 +901,15 @@ function renderBudgetSections() {
     const div=document.createElement('div');
     div.className='card';
     const itemsHTML=sec.items.map((item,ii)=>{
-      const badges=item.linked?`<span class="linked-b"><i class="ti ti-link" aria-hidden="true" style="font-size:10px"></i></span>`:'';
+      const badges=item.linked||item.investSynced?`<span class="linked-b"><i class="ti ti-link" aria-hidden="true" style="font-size:10px"></i></span>`:'';
+      const isProtected = item.investKey==='k401' || item.linked || item.investSynced;
+      const delBtn = isProtected ? '' : `<button class="del-btn" onclick="deleteItem(${si},${ii})" aria-label="Remove"><i class="ti ti-trash" aria-hidden="true"></i></button>`;
       if(isDual) {
         return `<div style="padding:6px 0;border-bottom:0.5px solid var(--border)">
           <div class="brow" style="border:none;padding:0 0 4px">
             <span class="brow-lbl">${item.label} ${badges}</span>
             <button class="nws-b ${item.nws}" onclick="cycleBadge(${si},${ii})">${item.nws}</button>
-            <button class="del-btn" onclick="deleteItem(${si},${ii})" aria-label="Remove"><i class="ti ti-trash" aria-hidden="true"></i></button>
+            ${delBtn}
           </div>
           <div class="dual-sub">
             <div class="dual-inp">
@@ -913,7 +927,7 @@ function renderBudgetSections() {
         <span class="brow-lbl">${item.label} ${badges}</span>
         <button class="nws-b ${item.nws}" onclick="cycleBadge(${si},${ii})">${item.nws}</button>
         <input class="brow-in" type="number" value="${item.val[0]}" min="0" oninput="updateBudgetItem(${si},${ii},0,this.value)" placeholder="0">
-        <button class="del-btn" onclick="deleteItem(${si},${ii})" aria-label="Remove"><i class="ti ti-trash" aria-hidden="true"></i></button>
+        ${delBtn}
       </div>`;
     }).join('');
     div.innerHTML=`
@@ -1133,9 +1147,13 @@ function calcHousing() {
   const gift     = parseFloat(document.getElementById('h-gift').value)||0;
   const dpaPct   = parseFloat(document.getElementById('h-dpa').value)||0;
   const dpaAmt         = Math.round(price * dpaPct / 100);
-  const totalAssistance = gift + dpaAmt;
+  // DPA applied first, then gift
+  const dpaApplied     = Math.min(dpaAmt, downRaw);
+  const remainAfterDpa = Math.max(0, downRaw - dpaApplied);
+  const giftApplied    = Math.min(gift, remainAfterDpa);
+  const totalAssistance = dpaAmt + gift;
   const targetDown     = downRaw;
-  const yourCash       = Math.max(0, targetDown - totalAssistance);
+  const yourCash       = Math.max(0, targetDown - dpaApplied - giftApplied);
   const loan           = Math.max(0, price - targetDown);
   const effectiveDown  = targetDown;
   const giftPctOfPrice = price > 0 ? (gift/price*100).toFixed(1) : '0.0';
@@ -1144,10 +1162,9 @@ function calcHousing() {
   document.getElementById('dpa-disp').textContent = `${dpaPct.toFixed(1)}%  (${fmtC(dpaAmt)})`;
   const dpaSummary = document.getElementById('dpa-summary');
   if(totalAssistance > 0) {
-    const covered = Math.min(totalAssistance, targetDown);
-    const excess  = Math.max(0, totalAssistance - targetDown);
+    const excess = Math.max(0, totalAssistance - targetDown);
     dpaSummary.style.display = 'block';
-    dpaSummary.innerHTML = `✓ Gift + DPA cover <strong>${fmtC(covered)}</strong> of your <strong>${fmtC(targetDown)}</strong> down payment — you bring <strong>${fmtC(yourCash)}</strong> out of pocket${excess > 0 ? ` · <span style="color:#534AB7">${fmtC(excess)} excess offsets closing costs</span>` : ''}`;
+    dpaSummary.innerHTML = `✓ DPA (${fmtC(dpaApplied)}) applied first, then gift (${fmtC(giftApplied)}) — you bring <strong>${fmtC(yourCash)}</strong> out of pocket${excess > 0 ? ` · <span style="color:#534AB7">${fmtC(excess)} excess offsets closing costs</span>` : ''}`;
   } else { dpaSummary.style.display = 'none'; }
   const monthlyRate = rate/100/12, n = term * 12;
   let piPayment = 0;
@@ -1176,17 +1193,17 @@ function calcHousing() {
   const pmiNote=downPct<20&&pmiMo===0?`<div style="margin-top:6px;padding:5px 8px;background:#FAEEDA;border-radius:var(--r);font-size:11px;color:#854F0B">⚠ Down payment is ${downPct.toFixed(1)}% — PMI likely applies.</div>`:(downPct>=20?`<div style="margin-top:6px;font-size:11px;color:#3B6D11">✓ Down payment ≥ 20% — no PMI required</div>`:'');
   document.getElementById('h-cash-to-close').innerHTML=[
     {l:'Target down payment',v:fmtC(targetDown),sub:`${downPct.toFixed(1)}% of purchase price`},
-    ...(gift>0?[{l:'Gift funds (applied to down)',v:`− ${fmtC(Math.min(gift,targetDown))}`,c:'#3B6D11'}]:[]),
-    ...(dpaAmt>0?[{l:'DPA program (applied to down)',v:`− ${fmtC(Math.min(dpaAmt,Math.max(0,targetDown-gift)))}`,c:'#534AB7'}]:[]),
+    ...(dpaAmt>0?[{l:'DPA program (applied first)',v:`− ${fmtC(dpaApplied)}`,c:'#534AB7'}]:[]),
+    ...(giftApplied>0?[{l:'Gift funds (applied after DPA)',v:`− ${fmtC(giftApplied)}`,c:'#3B6D11'}]:[]),
     {l:'Your down payment cash',v:fmtC(yourCash),bold:true},
     {l:'Est. closing costs',v:fmtC(closingCosts),sub:'~2.5% of purchase price'},
-    ...(excessAfterDown>0?[{l:'Gift surplus → closing costs',v:`− ${fmtC(Math.min(excessAfterDown,closingCosts))}`,c:'#3B6D11'}]:[]),
+    ...(excessAfterDown>0?[{l:'Assistance surplus → closing costs',v:`− ${fmtC(Math.min(excessAfterDown,closingCosts))}`,c:'#534AB7'}]:[]),
     {l:'Prepaid / escrow',v:fmtC(prepaidEscrow),sub:'~2 months taxes & insurance'},
     {sep:true},{l:'Moving costs',v:fmtC(movingCosts),sub:'one-time'},
-    ...(excessAfterClosing>0?[{l:'Gift surplus → moving/furnishing',v:`− ${fmtC(Math.min(excessAfterClosing,oneTimeCosts))}`,c:'#3B6D11'}]:[]),
+    ...(excessAfterClosing>0?[{l:'Assistance surplus → moving/furnishing',v:`− ${fmtC(Math.min(excessAfterClosing,oneTimeCosts))}`,c:'#534AB7'}]:[]),
     {l:'Furnishing budget',v:fmtC(furnishCosts),sub:'one-time'},{sep:true},
     {l:'Total cash needed',v:fmtC(totalCashToClose),bold:true,c:'#185FA5'},
-    ...(excessAfterAll>0?[{l:'Remaining gift surplus',v:fmtC(excessAfterAll),c:'#3B6D11',sub:'after all costs covered'}]:[]),
+    ...(excessAfterAll>0?[{l:'Remaining surplus',v:fmtC(excessAfterAll),c:'#3B6D11',sub:'after all costs covered'}]:[]),
   ].map(r=>r.sep?`<div style="height:0.5px;background:var(--border);margin:6px 0"></div>`:`<div class="stat-row"><div><div class="stlbl">${r.l}</div>${r.sub?`<div style="font-size:11px;color:var(--t3)">${r.sub}</div>`:''}</div><span class="stval" style="color:${r.c||'var(--t1)'};font-weight:${r.bold?500:400}">${r.v}</span></div>`).join('')+pmiNote;
   const totalPaid=piPayment*n, totalInterest=totalPaid-loan;
   document.getElementById('h-summary').innerHTML=[
